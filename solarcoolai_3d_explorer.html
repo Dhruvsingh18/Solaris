@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SolarCoolAI — Unit 3D Explorer</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@200;300;400;500;600;700;800;900&family=Orbitron:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root {
+  --bg: #020810;
+  --teal: #00f5e4;
+  --teal2: #00c9ba;
+  --teal-glow: rgba(0,245,228,0.4);
+  --amber: #ffaa00;
+  --amber2: #ff8c00;
+  --amber-glow: rgba(255,170,0,0.4);
+  --red: #ff3355;
+  --green: #00ff88;
+  --blue: #4488ff;
+  --panel-bg: rgba(0,20,35,0.85);
+  --panel-border: rgba(0,245,228,0.15);
+  --text: #c8e8f0;
+  --text2: #5a8090;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Exo 2', sans-serif;
+  height: 100vh;
+  overflow: hidden;
+  cursor: none;
+}
+
+/* ── CUSTOM CURSOR ── */
+#cursor {
+  position: fixed; width: 20px; height: 20px;
+  border: 1.5px solid var(--teal);
+  border-radius: 50%; pointer-events: none; z-index: 9999;
+  transform: translate(-50%,-50%);
+  transition: width 0.2s, height 0.2s, border-color 0.2s;
+  mix-blend-mode: screen;
+}
+#cursor-dot {
+  position: fixed; width: 4px; height: 4px;
+  background: var(--teal); border-radius: 50%;
+  pointer-events: none; z-index: 9999;
+  transform: translate(-50%,-50%);
+  box-shadow: 0 0 8px var(--teal);
+}
+#cursor.hovering {
+  width: 40px; height: 40px;
+  border-color: var(--amber);
+  border-width: 2px;
+}
+
+/* ── SCANLINE OVERLAY ── */
+body::after {
+  content: '';
+  position: fixed; inset: 0; z-index: 1;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+}
+
+/* ── CANVAS ── */
+#canvas {
+  position: fixed; inset: 0; z-index: 2;
+  width: 100%; height: 100%;
+}
+
+/* ── HUD FRAME ── */
+.hud-corner {
+  position: fixed; z-index: 10; pointer-events: none;
+  width: 60px; height: 60px;
+}
+.hud-corner::before, .hud-corner::after {
+  content: ''; position: absolute;
+  background: var(--teal);
+}
+.hud-corner::before { width: 2px; height: 30px; }
+.hud-corner::after { width: 30px; height: 2px; }
+.hud-corner.tl { top:16px; left:16px; }
+.hud-corner.tl::before { top:0; left:0; }
+.hud-corner.tl::after { top:0; left:0; }
+.hud-corner.tr { top:16px; right:16px; transform: scaleX(-1); }
+.hud-corner.tr::before { top:0; left:0; }
+.hud-corner.tr::after { top:0; left:0; }
+.hud-corner.bl { bottom:16px; left:16px; transform: scaleY(-1); }
+.hud-corner.bl::before { top:0; left:0; }
+.hud-corner.bl::after { top:0; left:0; }
+.hud-corner.br { bottom:16px; right:16px; transform: scale(-1); }
+.hud-corner.br::before { top:0; left:0; }
+.hud-corner.br::after { top:0; left:0; }
+
+/* ── HEADER ── */
+#header {
+  position: fixed; top:0; left:0; right:0; z-index: 20;
+  display: flex; align-items: center;
+  padding: 18px 32px;
+  background: linear-gradient(180deg, rgba(2,8,16,0.95) 0%, transparent 100%);
+  pointer-events: none;
+}
+.logo {
+  font-family: 'Orbitron', monospace;
+  font-size: 13px; font-weight: 700;
+  letter-spacing: 0.25em; text-transform: uppercase;
+  color: var(--teal);
+  text-shadow: 0 0 20px var(--teal-glow);
+}
+.logo span { color: var(--amber); }
+.header-line {
+  flex: 1; height: 1px; margin: 0 24px;
+  background: linear-gradient(90deg, var(--teal), transparent);
+  opacity: 0.3;
+}
+.header-data {
+  display: flex; gap: 28px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px; color: var(--text2);
+}
+.header-data span { color: var(--teal); margin-left: 4px; }
+
+/* ── INSTRUCTION BAR ── */
+#instructions {
+  position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+  z-index: 20;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px; color: var(--text2);
+  display: flex; gap: 24px; align-items: center;
+  background: rgba(2,8,16,0.7);
+  border: 1px solid var(--panel-border);
+  padding: 10px 24px; border-radius: 40px;
+  backdrop-filter: blur(12px);
+  letter-spacing: 0.05em;
+}
+.inst-key {
+  background: rgba(0,245,228,0.08);
+  border: 1px solid rgba(0,245,228,0.2);
+  padding: 3px 8px; border-radius: 4px;
+  color: var(--teal); font-size: 10px;
+}
+
+/* ── INFO PANEL ── */
+#info-panel {
+  position: fixed; right: 28px; top: 50%; transform: translateY(-50%);
+  z-index: 20; width: 300px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  backdrop-filter: blur(20px);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.4s, transform 0.4s;
+  transform: translateY(-50%) translateX(20px);
+  box-shadow: 0 0 40px rgba(0,245,228,0.05), inset 0 0 40px rgba(0,0,0,0.4);
+}
+#info-panel.visible {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+.panel-header-bar {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--panel-border);
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(0,245,228,0.04);
+}
+.panel-indicator {
+  width: 8px; height: 8px; border-radius: 50%;
+  animation: blink 1.5s infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+.panel-tag {
+  font-family: 'Orbitron', monospace;
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 0.2em; text-transform: uppercase;
+}
+.panel-close {
+  margin-left: auto; cursor: pointer; pointer-events: all;
+  width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+  color: var(--text2); font-size: 14px;
+  transition: color 0.2s;
+}
+.panel-close:hover { color: var(--teal); }
+.panel-title-txt {
+  padding: 18px 18px 8px;
+  font-family: 'Orbitron', monospace;
+  font-size: 15px; font-weight: 700; color: var(--teal);
+  line-height: 1.3;
+}
+.panel-sub-txt {
+  padding: 0 18px 14px;
+  font-size: 11px; color: var(--text2);
+  font-family: 'Share Tech Mono', monospace;
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.panel-divider {
+  height: 1px; margin: 0 18px;
+  background: linear-gradient(90deg, var(--teal), transparent);
+  opacity: 0.2; margin-bottom: 14px;
+}
+.panel-desc {
+  padding: 0 18px 16px;
+  font-size: 13px; line-height: 1.7; color: var(--text);
+}
+.panel-stats {
+  margin: 0 18px 18px;
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.stat-cell {
+  background: rgba(0,245,228,0.04);
+  border: 1px solid rgba(0,245,228,0.1);
+  border-radius: 4px; padding: 10px 12px;
+}
+.stat-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px; color: var(--text2);
+  text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px;
+}
+.stat-value {
+  font-family: 'Orbitron', monospace;
+  font-size: 14px; font-weight: 700;
+}
+.terminal-output {
+  margin: 0 18px 18px;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(0,245,228,0.08);
+  border-radius: 4px; padding: 12px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px; line-height: 1.8; color: var(--green);
+  min-height: 80px;
+}
+.terminal-output .prompt { color: var(--text2); }
+.cursor-blink {
+  display: inline-block; width: 7px; height: 13px;
+  background: var(--green); vertical-align: middle;
+  animation: blink 1s infinite;
+}
+
+/* ── COMPONENT MENU ── */
+#component-menu {
+  position: fixed; left: 28px; top: 50%; transform: translateY(-50%);
+  z-index: 20; display: flex; flex-direction: column; gap: 6px;
+}
+.comp-btn {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px;
+  background: rgba(2,8,16,0.7);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px; cursor: pointer;
+  transition: all 0.25s; pointer-events: all;
+  backdrop-filter: blur(12px);
+  min-width: 44px; overflow: hidden;
+  white-space: nowrap;
+}
+.comp-btn:hover, .comp-btn.active {
+  background: rgba(0,245,228,0.08);
+  border-color: rgba(0,245,228,0.35);
+  box-shadow: 0 0 20px rgba(0,245,228,0.08);
+}
+.comp-btn.active { border-color: var(--teal); }
+.comp-icon {
+  font-size: 16px; flex-shrink: 0;
+  width: 20px; text-align: center;
+}
+.comp-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px; color: var(--text2);
+  letter-spacing: 0.08em; text-transform: uppercase;
+  transition: color 0.25s;
+}
+.comp-btn:hover .comp-label,
+.comp-btn.active .comp-label { color: var(--teal); }
+.comp-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--text2); flex-shrink: 0;
+  transition: background 0.25s, box-shadow 0.25s;
+}
+.comp-btn.active .comp-dot {
+  background: var(--teal);
+  box-shadow: 0 0 8px var(--teal);
+}
+
+/* ── LOADING ── */
+#loader {
+  position: fixed; inset: 0; z-index: 100;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 24px;
+  transition: opacity 0.8s;
+}
+.loader-logo {
+  font-family: 'Orbitron', monospace;
+  font-size: 28px; font-weight: 900;
+  color: var(--teal);
+  text-shadow: 0 0 40px var(--teal-glow);
+  letter-spacing: 0.2em;
+}
+.loader-bar-wrap {
+  width: 240px; height: 2px;
+  background: rgba(0,245,228,0.1);
+  border-radius: 1px; overflow: hidden;
+}
+.loader-bar {
+  height: 100%; background: var(--teal);
+  box-shadow: 0 0 12px var(--teal);
+  border-radius: 1px;
+  animation: load 1.8s ease-out forwards;
+}
+@keyframes load { from{width:0} to{width:100%} }
+.loader-text {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px; color: var(--text2);
+  letter-spacing: 0.15em; text-transform: uppercase;
+}
+#loader.done { opacity: 0; pointer-events: none; }
+
+/* ── HOVER TOOLTIP ── */
+#tooltip {
+  position: fixed; z-index: 30;
+  background: rgba(0,20,35,0.9);
+  border: 1px solid var(--teal);
+  padding: 8px 14px; border-radius: 4px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px; color: var(--teal);
+  pointer-events: none;
+  opacity: 0; transition: opacity 0.2s;
+  transform: translate(16px, -50%);
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+  letter-spacing: 0.08em;
+}
+#tooltip.show { opacity: 1; }
+
+/* ── PULSE RINGS (hotspot markers) ── */
+.hotspot-label {
+  position: fixed; z-index: 15;
+  pointer-events: none;
+  display: flex; align-items: center; gap: 8px;
+  opacity: 0; transition: opacity 0.4s;
+}
+.hotspot-label.show { opacity: 1; }
+.hs-ring {
+  width: 16px; height: 16px; position: relative; flex-shrink: 0;
+}
+.hs-ring::before {
+  content: ''; position: absolute; inset: 0;
+  border: 1.5px solid var(--amber);
+  border-radius: 50%; animation: pulseRing 2s ease-out infinite;
+}
+.hs-ring::after {
+  content: ''; position: absolute;
+  width: 5px; height: 5px;
+  background: var(--amber); border-radius: 50%;
+  top: 50%; left: 50%; transform: translate(-50%,-50%);
+  box-shadow: 0 0 6px var(--amber);
+}
+@keyframes pulseRing {
+  0%{transform:scale(0.8);opacity:1}
+  100%{transform:scale(2.2);opacity:0}
+}
+.hs-text {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px; color: var(--amber);
+  letter-spacing: 0.1em; text-transform: uppercase;
+}
+
+/* ── DOOR OPEN INDICATOR ── */
+#door-indicator {
+  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+  z-index: 20;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px; color: var(--amber);
+  letter-spacing: 0.1em; text-transform: uppercase;
+  display: flex; align-items: center; gap: 10px;
+  opacity: 0; transition: opacity 0.5s;
+  background: rgba(2,8,16,0.7);
+  border: 1px solid rgba(255,170,0,0.2);
+  padding: 8px 20px; border-radius: 40px;
+  backdrop-filter: blur(12px);
+}
+#door-indicator.show { opacity: 1; }
+.door-ind-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--amber);
+  box-shadow: 0 0 8px var(--amber);
+  animation: blink 1s infinite;
+}
+
+/* ── STATUS STRIP ── */
+#status-strip {
+  position: fixed; top: 64px; left: 0; right: 0; z-index: 15;
+  display: flex; justify-content: center; gap: 0;
+  pointer-events: none;
+}
+.strip-item {
+  padding: 6px 20px;
+  border-right: 1px solid rgba(0,245,228,0.08);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px; color: var(--text2);
+  letter-spacing: 0.08em;
+  background: rgba(2,8,16,0.5);
+}
+.strip-item:last-child { border-right: none; }
+.strip-item .val { color: var(--teal); margin-left: 6px; }
+.strip-item .val.warn { color: var(--amber); }
+.strip-item .val.good { color: var(--green); }
+</style>
+</head>
+<body>
+
+<!-- CUSTOM CURSOR -->
+<div id="cursor"></div>
+<div id="cursor-dot"></div>
+
+<!-- LOADER -->
+<div id="loader">
+  <div class="loader-logo">SOLARCOOLAI</div>
+  <div class="loader-bar-wrap"><div class="loader-bar"></div></div>
+  <div class="loader-text" id="loader-text">Initializing 3D Engine...</div>
+</div>
+
+<!-- HUD CORNERS -->
+<div class="hud-corner tl"></div>
+<div class="hud-corner tr"></div>
+<div class="hud-corner bl"></div>
+<div class="hud-corner br"></div>
+
+<!-- HEADER -->
+<div id="header">
+  <div class="logo">Solar<span>Cool</span>AI &nbsp;·&nbsp; Unit MK-II</div>
+  <div class="header-line"></div>
+  <div class="header-data">
+    <div>UNIT ID<span>SC-4421</span></div>
+    <div>STATUS<span style="color:var(--green)">NOMINAL</span></div>
+    <div>TEMP<span>-18.4°C</span></div>
+    <div id="clock-hud">TIME<span id="hud-time">--:--:--</span></div>
+  </div>
+</div>
+
+<!-- STATUS STRIP -->
+<div id="status-strip">
+  <div class="strip-item">SOLAR OUTPUT<span class="val">9.4 kW</span></div>
+  <div class="strip-item">BATTERY<span class="val good">87%</span></div>
+  <div class="strip-item">CARGO HOLD<span class="val">-18.4°C</span></div>
+  <div class="strip-item">AI MODE<span class="val">OPTIMIZE</span></div>
+  <div class="strip-item">EFFICIENCY<span class="val good">94.2%</span></div>
+  <div class="strip-item">ALERTS<span class="val warn">1 WARN</span></div>
+</div>
+
+<!-- CANVAS -->
+<canvas id="canvas"></canvas>
+
+<!-- COMPONENT MENU -->
+<div id="component-menu">
+  <div class="comp-btn active" data-target="solar" onclick="focusComponent('solar')">
+    <div class="comp-dot"></div>
+    <div class="comp-icon">☀️</div>
+    <div class="comp-label">Solar Array</div>
+  </div>
+  <div class="comp-btn" data-target="battery" onclick="focusComponent('battery')">
+    <div class="comp-dot"></div>
+    <div class="comp-icon">⚡</div>
+    <div class="comp-label">Battery Pack</div>
+  </div>
+  <div class="comp-btn" data-target="ai" onclick="focusComponent('ai')">
+    <div class="comp-dot"></div>
+    <div class="comp-icon">🧠</div>
+    <div class="comp-label">AI Brain</div>
+  </div>
+  <div class="comp-btn" data-target="cooling" onclick="focusComponent('cooling')">
+    <div class="comp-dot"></div>
+    <div class="comp-icon">❄️</div>
+    <div class="comp-label">Cryo Cooling</div>
+  </div>
+  <div class="comp-btn" data-target="door" onclick="focusComponent('door')">
+    <div class="comp-dot"></div>
+    <div class="comp-icon">🚪</div>
+    <div class="comp-label">Access Door</div>
+  </div>
+  <div class="comp-btn" data-target="pipes" onclick="focusComponent('pipes')">
+    <div class="comp-dot"></div>
+    <div class="comp-icon">🔌</div>
+    <div class="comp-label">Energy Grid</div>
+  </div>
+</div>
+
+<!-- INFO PANEL -->
+<div id="info-panel">
+  <div class="panel-header-bar">
+    <div class="panel-indicator" id="panel-ind" style="background:var(--teal)"></div>
+    <div class="panel-tag" id="panel-tag">COMPONENT DATA</div>
+    <div class="panel-close" onclick="closePanel()">✕</div>
+  </div>
+  <div class="panel-title-txt" id="panel-title">—</div>
+  <div class="panel-sub-txt" id="panel-sub">—</div>
+  <div class="panel-divider"></div>
+  <div class="panel-desc" id="panel-desc">—</div>
+  <div class="panel-stats" id="panel-stats"></div>
+  <div class="terminal-output" id="panel-terminal"></div>
+</div>
+
+<!-- TOOLTIP -->
+<div id="tooltip"></div>
+
+<!-- DOOR INDICATOR -->
+<div id="door-indicator">
+  <div class="door-ind-dot"></div>
+  ACCESS PANEL OPEN — INTERNAL VIEW ACTIVE
+</div>
+
+<!-- INSTRUCTIONS -->
+<div id="instructions">
+  <span><span class="inst-key">DRAG</span> Orbit</span>
+  <span><span class="inst-key">SCROLL</span> Zoom</span>
+  <span><span class="inst-key">CLICK</span> Inspect Component</span>
+  <span><span class="inst-key">ESC</span> Reset View</span>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  CURSOR
+// ═══════════════════════════════════════════════
+const cur = document.getElementById('cursor');
+const curDot = document.getElementById('cursor-dot');
+let mx = 0, my = 0;
+document.addEventListener('mousemove', e => {
+  mx = e.clientX; my = e.clientY;
+  cur.style.left = mx + 'px'; cur.style.top = my + 'px';
+  curDot.style.left = mx + 'px'; curDot.style.top = my + 'px';
+});
+
+// ═══════════════════════════════════════════════
+//  CLOCK
+// ═══════════════════════════════════════════════
+setInterval(() => {
+  const t = new Date().toLocaleTimeString('en-US',{hour12:false});
+  const el = document.getElementById('hud-time');
+  if(el) el.textContent = t;
+}, 1000);
+
+// ═══════════════════════════════════════════════
+//  THREE.JS SCENE
+// ═══════════════════════════════════════════════
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setClearColor(0x020810);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x020810, 0.04);
+
+const camera = new THREE.PerspectiveCamera(38, window.innerWidth/window.innerHeight, 0.1, 200);
+camera.position.set(5, 3, 10);
+camera.lookAt(0, 0, 0);
+
+// ─── LIGHTS ───
+const ambient = new THREE.AmbientLight(0x112233, 0.6);
+scene.add(ambient);
+
+const keyLight = new THREE.DirectionalLight(0x00f5e4, 1.0);
+keyLight.position.set(6, 10, 8);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.width = 2048;
+keyLight.shadow.mapSize.height = 2048;
+scene.add(keyLight);
+
+const fillLight = new THREE.DirectionalLight(0xffaa00, 0.3);
+fillLight.position.set(-5, 3, -4);
+scene.add(fillLight);
+
+const rimLight = new THREE.DirectionalLight(0x4488ff, 0.4);
+rimLight.position.set(0, -4, -8);
+scene.add(rimLight);
+
+// ─── MATERIALS ───
+const matBody = new THREE.MeshPhongMaterial({ color: 0x0d1a24, specular: 0x00f5e4, shininess: 40 });
+const matBodyDark = new THREE.MeshPhongMaterial({ color: 0x080f18, specular: 0x001122, shininess: 20 });
+const matSolar = new THREE.MeshPhongMaterial({ color: 0x082030, specular: 0x0088aa, shininess: 120, emissive: 0x001828 });
+const matSolarGlass = new THREE.MeshPhongMaterial({ color: 0x001830, specular: 0x00f5e4, shininess: 200, transparent: true, opacity: 0.7 });
+const matBattery = new THREE.MeshPhongMaterial({ color: 0x0a2010, specular: 0x00ff88, shininess: 60 });
+const matAI = new THREE.MeshPhongMaterial({ color: 0x150828, specular: 0x8844ff, shininess: 100 });
+const matCooling = new THREE.MeshPhongMaterial({ color: 0x0a1828, specular: 0x4488ff, shininess: 80 });
+const matAccent = new THREE.MeshPhongMaterial({ color: 0x00f5e4, emissive: 0x00c0b0, emissiveIntensity: 0.8, shininess: 200 });
+const matAmber = new THREE.MeshPhongMaterial({ color: 0xffaa00, emissive: 0xcc6600, emissiveIntensity: 0.8, shininess: 200 });
+const matGreen = new THREE.MeshPhongMaterial({ color: 0x00ff88, emissive: 0x00cc66, emissiveIntensity: 0.8 });
+const matGlass = new THREE.MeshPhongMaterial({ color: 0x001a2a, transparent: true, opacity: 0.3, specular: 0x00f5e4, shininess: 300 });
+const matDoor = new THREE.MeshPhongMaterial({ color: 0x111f2e, specular: 0x00f5e4, shininess: 60 });
+const matInner = new THREE.MeshPhongMaterial({ color: 0x05101a, specular: 0x002233, shininess: 30 });
+const matChip = new THREE.MeshPhongMaterial({ color: 0x1a0a30, specular: 0x6644ff, shininess: 80, emissive: 0x0a0520 });
+const matWire = new THREE.MeshPhongMaterial({ color: 0x00f5e4, emissive: 0x00c0b0, emissiveIntensity: 0.5 });
+
+// ─── MAIN UNIT GROUP ───
+const unitGroup = new THREE.Group();
+scene.add(unitGroup);
+
+// ─── CHASSIS / FRAME ───
+// Main body
+const bodyGeo = new THREE.BoxGeometry(4, 3, 3);
+const body = new THREE.Mesh(bodyGeo, matBody);
+body.castShadow = true; body.receiveShadow = true;
+unitGroup.add(body);
+
+// Body edge highlights
+const edgesBody = new THREE.EdgesGeometry(bodyGeo);
+const edgeLines = new THREE.LineSegments(edgesBody, new THREE.LineBasicMaterial({ color: 0x00f5e4, transparent: true, opacity: 0.12 }));
+unitGroup.add(edgeLines);
+
+// Side panels (inset)
+const panelL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 2.4, 2.4), new THREE.MeshPhongMaterial({ color: 0x0a1826, specular: 0x00f5e4, shininess: 40 }));
+panelL.position.set(-1.95, 0, 0); unitGroup.add(panelL);
+const panelR = panelL.clone(); panelR.position.set(1.95, 0, 0); unitGroup.add(panelR);
+
+// ─── SOLAR PANELS (TOP) ───
+const solarGroup = new THREE.Group();
+solarGroup.position.y = 1.7;
+unitGroup.add(solarGroup);
+
+const solarBase = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.08, 2.8), matBodyDark);
+solarGroup.add(solarBase);
+
+// Individual cells
+for(let xi = 0; xi < 6; xi++) {
+  for(let zi = 0; zi < 4; zi++) {
+    const cell = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.04, 0.6), matSolar);
+    cell.position.set(-1.5 + xi * 0.62, 0.06, -0.9 + zi * 0.66);
+    solarGroup.add(cell);
+    // Cell highlight
+    const ch = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.01, 0.58), matSolarGlass);
+    ch.position.copy(cell.position);
+    ch.position.y += 0.025;
+    solarGroup.add(ch);
+  }
+}
+// Solar frame
+const solarFrame = new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.06, 2.9), matBodyDark);
+solarFrame.position.y = 0.03;
+solarGroup.add(solarFrame);
+
+const solarEdges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(3.9, 0.1, 2.9)), new THREE.LineBasicMaterial({ color: 0x00f5e4, transparent: true, opacity: 0.25 }));
+solarGroup.add(solarEdges);
+
+// ─── BATTERY BANK (RIGHT SIDE) ───
+const battGroup = new THREE.Group();
+battGroup.position.set(2.3, 0, 0);
+unitGroup.add(battGroup);
+
+const battBase = new THREE.Mesh(new THREE.BoxGeometry(0.6, 2.8, 2.8), matBodyDark);
+battGroup.add(battBase);
+
+for(let i = 0; i < 6; i++) {
+  const cell = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 2.4), matBattery);
+  cell.position.set(0.06, -1.05 + i * 0.42, 0);
+  battGroup.add(cell);
+  // Charge indicator
+  const ind = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.12), i < 5 ? matGreen : new THREE.MeshPhongMaterial({ color: 0x113300, emissive: 0x001100 }));
+  ind.position.set(0.32, -1.05 + i * 0.42, -0.9);
+  battGroup.add(ind);
+}
+// Batt edges
+battGroup.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(0.62, 2.82, 2.82)), new THREE.LineBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.15 })));
+
+// ─── AI MODULE (FRONT CENTER) ───
+const aiGroup = new THREE.Group();
+aiGroup.position.set(0, 0.3, 1.6);
+unitGroup.add(aiGroup);
+
+const aiBox = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.0, 0.2), matAI);
+aiGroup.add(aiBox);
+
+// AI screen
+const aiScreen = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.7, 0.02), matGlass);
+aiScreen.position.z = 0.11;
+aiGroup.add(aiScreen);
+
+// Circuit pattern lines on AI box
+const circuitMat = new THREE.LineBasicMaterial({ color: 0x8844ff, transparent: true, opacity: 0.5 });
+const cPts = (pts) => { const g = new THREE.BufferGeometry().setFromPoints(pts.map(p=>new THREE.Vector3(...p))); return new THREE.Line(g, circuitMat); };
+aiGroup.add(cPts([[-0.5, 0.2, 0.12],[-0.2, 0.2, 0.12],[-0.2, 0, 0.12],[0.1, 0, 0.12]]));
+aiGroup.add(cPts([[0.3, 0.2, 0.12],[0.5, 0.2, 0.12],[0.5, -0.1, 0.12],[0.6, -0.1, 0.12]]));
+aiGroup.add(cPts([[-0.6, -0.1, 0.12],[-0.3, -0.1, 0.12],[-0.3, 0.1, 0.12]]));
+
+// AI glow point
+const aiLight = new THREE.PointLight(0x8844ff, 0.8, 3);
+aiLight.position.set(0, 0, 0.5);
+aiGroup.add(aiLight);
+
+// ─── COOLING VENTS (BOTTOM FRONT) ───
+const coolGroup = new THREE.Group();
+coolGroup.position.set(0, -1.3, 1.51);
+unitGroup.add(coolGroup);
+
+const ventBase = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.5, 0.08), matCooling);
+coolGroup.add(ventBase);
+
+for(let i = 0; i < 18; i++) {
+  const slat = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.3, 0.12), matBodyDark);
+  slat.position.x = -1.7 + i * 0.2;
+  coolGroup.add(slat);
+}
+// Blue cold glow
+const coldLight = new THREE.PointLight(0x4488ff, 0.5, 3);
+coldLight.position.set(0, 0, 0.3);
+coolGroup.add(coldLight);
+coolGroup.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(3.62, 0.52, 0.1)), new THREE.LineBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.3 })));
+
+// ─── ACCESS DOOR (FRONT LEFT) ───
+const doorGroup = new THREE.Group();
+doorGroup.position.set(-1.1, 0.2, 1.51);
+unitGroup.add(doorGroup);
+
+const door = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2.2, 0.08), matDoor);
+doorGroup.add(door);
+
+// Door handle
+const handle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.12), matAccent);
+handle.position.set(0.5, 0, 0.06);
+doorGroup.add(handle);
+
+// Door edges
+doorGroup.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1.52, 2.22, 0.08)), new THREE.LineBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.4 })));
+
+// Door warning stripe
+const stripeGeo = new THREE.BoxGeometry(1.48, 0.06, 0.02);
+const stripeMat = new THREE.MeshPhongMaterial({ color: 0xffaa00, emissive: 0xcc6600, emissiveIntensity: 0.3 });
+for(let i = 0; i < 4; i++) {
+  const stripe = new THREE.Mesh(stripeGeo, stripeMat);
+  stripe.position.set(0, -0.8 + i * 0.54, 0.05);
+  doorGroup.add(stripe);
+}
+
+// ─── INTERIOR (hidden until door opens) ───
+const interiorGroup = new THREE.Group();
+interiorGroup.position.set(-1.1, 0.2, 1.0);
+interiorGroup.visible = false;
+unitGroup.add(interiorGroup);
+
+// Interior walls
+const iWall = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.1, 0.05), matInner);
+iWall.position.z = -0.6;
+interiorGroup.add(iWall);
+
+// Circuit boards
+const boardMat = new THREE.MeshPhongMaterial({ color: 0x0a2010, emissive: 0x001008, shininess: 40 });
+const board1 = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.03), boardMat);
+board1.position.set(0, 0.4, -0.55);
+interiorGroup.add(board1);
+const board2 = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.03), boardMat);
+board2.position.set(0, -0.2, -0.55);
+interiorGroup.add(board2);
+
+// Chips on boards
+const chipPositions = [[-0.2,0.5,-0.53],[0.1,0.5,-0.53],[0.25,0.3,-0.53],[-0.2,-0.1,-0.53],[0.1,-0.1,-0.53],[-0.15,-0.3,-0.53],[0.2,-0.25,-0.53]];
+chipPositions.forEach(([x,y,z]) => {
+  const chip = new THREE.Mesh(new THREE.BoxGeometry(0.12,0.08,0.02), matChip);
+  chip.position.set(x,y,z);
+  interiorGroup.add(chip);
+  // Chip legs
+  const legMat = new THREE.LineBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.6 });
+  const pts = [new THREE.Vector3(x-0.08,y,z+0.01), new THREE.Vector3(x-0.14,y,z+0.01)];
+  const lg = new THREE.BufferGeometry().setFromPoints(pts);
+  interiorGroup.add(new THREE.Line(lg, legMat));
+});
+
+// Interior wires
+const wireMat = new THREE.LineBasicMaterial({ color: 0x00f5e4, transparent: true, opacity: 0.5 });
+const wireData = [
+  [[-0.3,0.6,-0.52],[-0.3,0.2,-0.52],[-0.1,0.2,-0.52]],
+  [[0.3,0.6,-0.52],[0.3,-0.5,-0.52],[-0.2,-0.5,-0.52]],
+  [[-0.4,-0.1,-0.52],[-0.4,-0.6,-0.52],[0.1,-0.6,-0.52]],
+];
+wireData.forEach(pts => {
+  const g = new THREE.BufferGeometry().setFromPoints(pts.map(p=>new THREE.Vector3(...p)));
+  interiorGroup.add(new THREE.Line(g, wireMat));
+});
+
+// Interior light
+const intLight = new THREE.PointLight(0x00f5e4, 1.2, 2);
+intLight.position.set(0, 0.5, -0.2);
+interiorGroup.add(intLight);
+
+// ─── ENERGY PIPE NETWORK ───
+const pipesGroup = new THREE.Group();
+unitGroup.add(pipesGroup);
+
+const pipeMat2 = new THREE.MeshPhongMaterial({ color: 0x00c0b0, emissive: 0x007060, emissiveIntensity: 0.5, shininess: 100 });
+const makeRoundPipe = (from, to, r=0.04) => {
+  const dir = new THREE.Vector3().subVectors(new THREE.Vector3(...to), new THREE.Vector3(...from));
+  const len = dir.length();
+  const mid = new THREE.Vector3(...from).add(new THREE.Vector3(...to)).multiplyScalar(0.5);
+  const geo = new THREE.CylinderGeometry(r, r, len, 6);
+  const m = new THREE.Mesh(geo, pipeMat2);
+  m.position.copy(mid);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.normalize());
+  return m;
+};
+
+const pipeData = [
+  [[0,1.65,0],[0,1.65,1.5]],
+  [[-1.5,1.65,1.5],[-1.5,0.5,1.5]],
+  [[1.5,1.65,1.5],[1.5,-1.0,1.5]],
+  [[0,1.65,1.5],[1.5,1.65,1.5]],
+  [[0,1.65,1.5],[-1.5,1.65,1.5]],
+  [[2.0,0.5,0],[2.0,0.5,1.5]],
+  [[-1.5,-1.0,1.5],[1.5,-1.0,1.5]],
+];
+pipeData.forEach(([from,to]) => pipesGroup.add(makeRoundPipe(from, to)));
+
+// Glowing nodes at intersections
+const nodeGeo = new THREE.SphereGeometry(0.07, 8, 8);
+[[0,1.65,1.5],[1.5,1.65,1.5],[-1.5,1.65,1.5],[1.5,-1.0,1.5],[-1.5,-1.0,1.5],[2.0,0.5,1.5]].forEach(p => {
+  const node = new THREE.Mesh(nodeGeo, matAccent);
+  node.position.set(...p);
+  pipesGroup.add(node);
+});
+
+// ─── GROUND PLANE ───
+const groundGeo = new THREE.PlaneGeometry(30, 30);
+const groundMat = new THREE.MeshPhongMaterial({ color: 0x030c18, shininess: 0 });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI/2;
+ground.position.y = -1.8;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Grid
+const gridHelper = new THREE.GridHelper(20, 40, 0x00f5e4, 0x00f5e4);
+gridHelper.material.transparent = true;
+gridHelper.material.opacity = 0.06;
+gridHelper.position.y = -1.79;
+scene.add(gridHelper);
+
+// ─── FLOATING PARTICLES ───
+const partGeo = new THREE.BufferGeometry();
+const partCount = 200;
+const partPos = new Float32Array(partCount * 3);
+for(let i = 0; i < partCount; i++) {
+  partPos[i*3] = (Math.random()-0.5)*16;
+  partPos[i*3+1] = (Math.random()-0.5)*8;
+  partPos[i*3+2] = (Math.random()-0.5)*12;
+}
+partGeo.setAttribute('position', new THREE.BufferAttribute(partPos, 3));
+const partMat = new THREE.PointsMaterial({ color: 0x00f5e4, size: 0.03, transparent: true, opacity: 0.4 });
+scene.add(new THREE.Points(partGeo, partMat));
+
+// ═══════════════════════════════════════════════
+//  RAYCASTING — CLICKABLE OBJECTS
+// ═══════════════════════════════════════════════
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+const clickTargets = [
+  { meshes: [solarGroup], id: 'solar' },
+  { meshes: [battGroup], id: 'battery' },
+  { meshes: [aiGroup], id: 'ai' },
+  { meshes: [coolGroup], id: 'cooling' },
+  { meshes: [doorGroup], id: 'door' },
+  { meshes: [pipesGroup], id: 'pipes' },
+];
+
+function getAllMeshes(group) {
+  const result = [];
+  group.traverse(c => { if(c.isMesh) result.push(c); });
+  return result;
+}
+
+const allClickable = [];
+clickTargets.forEach(ct => {
+  const meshes = Array.isArray(ct.meshes) ? ct.meshes.flatMap(getAllMeshes) : getAllMeshes(ct.meshes);
+  meshes.forEach(m => { m.userData.componentId = ct.id; allClickable.push(m); });
+});
+
+// ─── COMPONENT DATA ───
+const componentData = {
+  solar: {
+    color: '#ffaa00',
+    tag: 'PHOTOVOLTAIC ARRAY',
+    title: 'Solar PV Array',
+    sub: 'Primary Power Generation System',
+    desc: 'Monocrystalline silicon panels with anti-reflective nano-coating. Generates up to 12 kW peak output. AI dynamically adjusts angle simulation and load balancing based on real-time irradiance data and weather forecasting.',
+    stats: [
+      { label: 'Peak Output', value: '12 kW', color: '#ffaa00' },
+      { label: 'Efficiency', value: '22.4%', color: '#00ff88' },
+      { label: 'Cell Count', value: '24', color: '#00f5e4' },
+      { label: 'Lifespan', value: '25 yrs', color: '#00f5e4' },
+    ],
+    terminal: [
+      '> SOLAR.SYS INIT',
+      '> irradiance: 847 W/m²',
+      '> output: 9.4 kW / 12 kW',
+      '> efficiency: 94.2% optimal',
+      '> forecast: CLEAR 48h ✓',
+    ]
+  },
+  battery: {
+    color: '#00ff88',
+    tag: 'ENERGY STORAGE MODULE',
+    title: 'LiFePO₄ Battery Bank',
+    sub: '48 kWh High-Density Storage',
+    desc: 'Six lithium iron phosphate cell stacks in redundant configuration. Thermal management integrated. Powers full cooling system for 4+ hours of autonomy during cloud cover or night operation. BMS monitors each cell individually.',
+    stats: [
+      { label: 'Capacity', value: '48 kWh', color: '#00ff88' },
+      { label: 'Charge', value: '87%', color: '#00ff88' },
+      { label: 'Cycles', value: '4,000+', color: '#00f5e4' },
+      { label: 'Autonomy', value: '4.2 hrs', color: '#ffaa00' },
+    ],
+    terminal: [
+      '> BATT.SYS STATUS',
+      '> cells [1-6]: NOMINAL',
+      '> charge: 41.7 / 48.0 kWh',
+      '> temp: 24.1°C (safe)',
+      '> ETA full: 1h 14m ✓',
+    ]
+  },
+  ai: {
+    color: '#8844ff',
+    tag: 'NEURAL CONTROL UNIT',
+    title: 'SolarCoolAI Brain',
+    sub: 'LSTM + Transformer Policy Engine',
+    desc: 'Edge-deployed ML model running on dedicated NVIDIA Jetson module. Processes 18 sensor streams simultaneously. Predicts cargo temperature drift 6 hours ahead. Executes <30ms control loops. Self-learns from fleet-wide data.',
+    stats: [
+      { label: 'Response', value: '<30ms', color: '#8844ff' },
+      { label: 'Sensors', value: '18', color: '#00f5e4' },
+      { label: 'Accuracy', value: '99.2%', color: '#00ff88' },
+      { label: 'Model', value: 'LSTM+T', color: '#8844ff' },
+    ],
+    terminal: [
+      '> AI.ENGINE v2.4 ONLINE',
+      '> cargo: SEAFOOD detected',
+      '> optimal: -18.5°C',
+      '> surplus: +3.3kW → batt',
+      '> prediction: STABLE 6h ✓',
+    ]
+  },
+  cooling: {
+    color: '#4488ff',
+    tag: 'CRYOGENIC COOLING SYSTEM',
+    title: 'Cryo Cooling Module',
+    sub: 'Variable-Speed Compressor Array',
+    desc: 'Three-stage variable-speed compressor with R290 refrigerant (zero ozone depletion). AI modulates cooling intensity to match cargo type and ambient conditions. Achieves -25°C in cargo hold, +5°C crew zone simultaneously.',
+    stats: [
+      { label: 'Min Temp', value: '-25°C', color: '#4488ff' },
+      { label: 'Max Temp', value: '+5°C', color: '#4488ff' },
+      { label: 'Draw', value: '6.1 kW', color: '#ffaa00' },
+      { label: 'COP', value: '3.8', color: '#00ff88' },
+    ],
+    terminal: [
+      '> CRYO.CTRL ACTIVE',
+      '> hold-A: -18.4°C ✓',
+      '> hold-B: -17.9°C ✓',
+      '> compressor: 71% load',
+      '> refrigerant: R290 OK ✓',
+    ]
+  },
+  door: {
+    color: '#ffaa00',
+    tag: 'ACCESS & MAINTENANCE',
+    title: 'Primary Access Panel',
+    sub: 'Interior Systems Bay — Open for Inspection',
+    desc: 'Tool-free access to all serviceable components. Interior houses AI control boards, power management system, fiber optic data bus, and emergency manual override controls. Full service in 2–3 days without dry-docking.',
+    stats: [
+      { label: 'Access', value: 'OPEN', color: '#ffaa00' },
+      { label: 'Install', value: '48 hrs', color: '#00f5e4' },
+      { label: 'Service', value: 'In-Port', color: '#00ff88' },
+      { label: 'Weight', value: '2.4t', color: '#00f5e4' },
+    ],
+    terminal: [
+      '> DOOR.ACCESS OPEN',
+      '> interior: ILLUMINATED',
+      '> boards: 7 detected',
+      '> diagnostics: PASS ✓',
+      '> seal integrity: 100% ✓',
+    ]
+  },
+  pipes: {
+    color: '#00f5e4',
+    tag: 'ENERGY DISTRIBUTION NETWORK',
+    title: 'Power Grid & Data Bus',
+    sub: 'Integrated Energy Routing System',
+    desc: 'Smart energy routing pipes carry both electrical power and fiber optic data. AI dynamically re-routes power between solar, battery, and loads in <50ms. Redundant pathways ensure zero single-point failures. Color-coded nodes show flow status.',
+    stats: [
+      { label: 'Routes', value: '7 active', color: '#00f5e4' },
+      { label: 'Latency', value: '<50ms', color: '#00f5e4' },
+      { label: 'Redundancy', value: '3x', color: '#00ff88' },
+      { label: 'Throughput', value: '12 kW', color: '#ffaa00' },
+    ],
+    terminal: [
+      '> GRID.NET STATUS',
+      '> solar → cooling: 6.1kW',
+      '> solar → battery: 3.3kW',
+      '> battery → reserve: OK',
+      '> all nodes: NOMINAL ✓',
+    ]
+  }
+};
+
+// ═══════════════════════════════════════════════
+//  ORBIT CONTROLS (manual)
+// ═══════════════════════════════════════════════
+let isDragging = false;
+let prevMouse = { x: 0, y: 0 };
+let spherical = { theta: 0.4, phi: 1.1, radius: 12 };
+let targetSpherical = { ...spherical };
+
+canvas.addEventListener('mousedown', e => { isDragging = true; prevMouse = { x: e.clientX, y: e.clientY }; });
+window.addEventListener('mouseup', () => isDragging = false);
+
+window.addEventListener('mousemove', e => {
+  if(!isDragging) return;
+  const dx = e.clientX - prevMouse.x;
+  const dy = e.clientY - prevMouse.y;
+  targetSpherical.theta -= dx * 0.008;
+  targetSpherical.phi = Math.max(0.2, Math.min(2.0, targetSpherical.phi + dy * 0.008));
+  prevMouse = { x: e.clientX, y: e.clientY };
+});
+
+canvas.addEventListener('wheel', e => {
+  targetSpherical.radius = Math.max(5, Math.min(22, targetSpherical.radius + e.deltaY * 0.02));
+  e.preventDefault();
+}, { passive: false });
+
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape') {
+    targetSpherical = { theta: 0.4, phi: 1.1, radius: 12 };
+    closePanel();
+  }
+});
+
+// ═══════════════════════════════════════════════
+//  DOOR ANIMATION
+// ═══════════════════════════════════════════════
+let doorOpen = false;
+let doorAngle = 0;
+let doorTargetAngle = 0;
+
+function toggleDoor(open) {
+  doorOpen = open;
+  doorTargetAngle = open ? -Math.PI * 0.65 : 0;
+  interiorGroup.visible = true;
+  document.getElementById('door-indicator').classList.toggle('show', open);
+  if(!open) setTimeout(() => { interiorGroup.visible = false; }, 700);
+}
+
+// ═══════════════════════════════════════════════
+//  PANEL UI
+// ═══════════════════════════════════════════════
+let panelOpen = false;
+let currentComponent = null;
+
+function showPanel(id) {
+  const data = componentData[id];
+  if(!data) return;
+  currentComponent = id;
+
+  document.getElementById('panel-ind').style.background = data.color;
+  document.getElementById('panel-tag').textContent = data.tag;
+  document.getElementById('panel-tag').style.color = data.color;
+  document.getElementById('panel-title').textContent = data.title;
+  document.getElementById('panel-title').style.color = data.color;
+  document.getElementById('panel-sub').textContent = data.sub;
+  document.getElementById('panel-desc').textContent = data.desc;
+
+  // Stats
+  const statsEl = document.getElementById('panel-stats');
+  statsEl.innerHTML = data.stats.map(s => `
+    <div class="stat-cell">
+      <div class="stat-label">${s.label}</div>
+      <div class="stat-value" style="color:${s.color}">${s.value}</div>
+    </div>
+  `).join('');
+
+  // Terminal typewriter
+  const term = document.getElementById('panel-terminal');
+  term.innerHTML = '';
+  let lineIdx = 0;
+  function typeLine() {
+    if(lineIdx >= data.terminal.length) {
+      term.innerHTML += '<span class="cursor-blink"></span>';
+      return;
+    }
+    const line = document.createElement('div');
+    if(lineIdx === 0) line.innerHTML = `<span class="prompt">${data.terminal[lineIdx]}</span>`;
+    else line.textContent = data.terminal[lineIdx];
+    term.appendChild(line);
+    lineIdx++;
+    setTimeout(typeLine, 180 + Math.random() * 100);
+  }
+  typeLine();
+
+  if(id === 'door') toggleDoor(true);
+  else if(doorOpen && id !== 'door') { toggleDoor(false); }
+
+  document.getElementById('info-panel').classList.add('visible');
+  panelOpen = true;
+
+  // Highlight menu
+  document.querySelectorAll('.comp-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.target === id);
+  });
+}
+
+function closePanel() {
+  document.getElementById('info-panel').classList.remove('visible');
+  panelOpen = false;
+  currentComponent = null;
+  if(doorOpen) toggleDoor(false);
+  document.querySelectorAll('.comp-btn').forEach(b => b.classList.remove('active'));
+}
+
+function focusComponent(id) {
+  // Set camera angle to face that component
+  const camAngles = {
+    solar:   { theta: 0.2, phi: 0.5, radius: 10 },
+    battery: { theta: -0.8, phi: 1.1, radius: 10 },
+    ai:      { theta: 0.1, phi: 1.1, radius: 8 },
+    cooling: { theta: 0.1, phi: 1.4, radius: 9 },
+    door:    { theta: 0.4, phi: 1.1, radius: 9 },
+    pipes:   { theta: 0.3, phi: 0.9, radius: 12 },
+  };
+  if(camAngles[id]) Object.assign(targetSpherical, camAngles[id]);
+  showPanel(id);
+}
+
+// ─── CLICK ───
+canvas.addEventListener('click', e => {
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(allClickable);
+  if(hits.length > 0) {
+    const id = hits[0].object.userData.componentId;
+    if(id) focusComponent(id);
+  }
+});
+
+// ─── HOVER TOOLTIP ───
+const tooltip = document.getElementById('tooltip');
+const tooltipLabels = {
+  solar: '☀️ Solar Array — Click to inspect',
+  battery: '⚡ Battery Bank — Click to inspect',
+  ai: '🧠 AI Module — Click to inspect',
+  cooling: '❄️ Cooling System — Click to inspect',
+  door: '🚪 Access Door — Click to open',
+  pipes: '🔌 Energy Grid — Click to inspect',
+};
+
+canvas.addEventListener('mousemove', e => {
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(allClickable);
+  if(hits.length > 0 && hits[0].object.userData.componentId) {
+    const id = hits[0].object.userData.componentId;
+    tooltip.textContent = tooltipLabels[id] || id;
+    tooltip.style.left = e.clientX + 'px';
+    tooltip.style.top = e.clientY + 'px';
+    tooltip.classList.add('show');
+    cur.classList.add('hovering');
+  } else {
+    tooltip.classList.remove('show');
+    cur.classList.remove('hovering');
+  }
+});
+
+// ═══════════════════════════════════════════════
+//  ANIMATION LOOP
+// ═══════════════════════════════════════════════
+let t = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  t += 0.01;
+
+  // Smooth orbit
+  spherical.theta += (targetSpherical.theta - spherical.theta) * 0.07;
+  spherical.phi += (targetSpherical.phi - spherical.phi) * 0.07;
+  spherical.radius += (targetSpherical.radius - spherical.radius) * 0.07;
+
+  // Auto-rotate when no panel open and not dragging
+  if(!panelOpen && !isDragging) {
+    targetSpherical.theta += 0.003;
+  }
+
+  camera.position.x = spherical.radius * Math.sin(spherical.phi) * Math.sin(spherical.theta);
+  camera.position.y = spherical.radius * Math.cos(spherical.phi) + 0.5;
+  camera.position.z = spherical.radius * Math.sin(spherical.phi) * Math.cos(spherical.theta);
+  camera.lookAt(0, 0.2, 0);
+
+  // Door animation
+  doorAngle += (doorTargetAngle - doorAngle) * 0.08;
+  doorGroup.rotation.y = doorAngle;
+
+  // Solar panel shimmer
+  solarGroup.children.forEach((c, i) => {
+    if(c.isMesh && c.material === matSolarGlass) {
+      c.material.opacity = 0.5 + 0.25 * Math.sin(t * 2 + i * 0.3);
+    }
+  });
+
+  // AI pulse
+  aiLight.intensity = 0.5 + 0.5 * Math.sin(t * 3);
+  aiScreen.material.opacity = 0.25 + 0.15 * Math.sin(t * 2.5);
+
+  // Battery indicator blink
+  battGroup.children.forEach((c, i) => {
+    if(c.isMesh && c.material === matGreen) {
+      c.material.emissiveIntensity = 0.5 + 0.5 * Math.sin(t * 2 + i * 0.8);
+    }
+  });
+
+  // Cooling pulse
+  coldLight.intensity = 0.3 + 0.3 * Math.sin(t * 1.5);
+
+  // Pipe node pulse
+  pipesGroup.children.forEach((c, i) => {
+    if(c.isMesh && c.material === matAccent) {
+      c.material.emissiveIntensity = 0.5 + 0.4 * Math.sin(t * 2.5 + i * 0.7);
+    }
+  });
+
+  // Floating particles drift
+  const positions = partGeo.attributes.position.array;
+  for(let i = 0; i < partCount; i++) {
+    positions[i*3+1] += 0.002 * Math.sin(t + i);
+  }
+  partGeo.attributes.position.needsUpdate = true;
+
+  renderer.render(scene, camera);
+}
+
+// ═══════════════════════════════════════════════
+//  RESIZE
+// ═══════════════════════════════════════════════
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ═══════════════════════════════════════════════
+//  LOADER
+// ═══════════════════════════════════════════════
+const loaderSteps = [
+  'Initializing 3D Engine...',
+  'Loading Unit Geometry...',
+  'Calibrating Ray Tracer...',
+  'Connecting Sensor Array...',
+  'AI Brain Online...',
+  'Ready.'
+];
+let stepIdx = 0;
+const loaderText = document.getElementById('loader-text');
+const stepInterval = setInterval(() => {
+  stepIdx++;
+  if(stepIdx < loaderSteps.length) loaderText.textContent = loaderSteps[stepIdx];
+  else clearInterval(stepInterval);
+}, 300);
+
+setTimeout(() => {
+  document.getElementById('loader').classList.add('done');
+  animate();
+  // Auto-open solar panel info on load
+  setTimeout(() => focusComponent('solar'), 600);
+}, 2000);
+</script>
+</body>
+</html>
